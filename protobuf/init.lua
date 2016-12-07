@@ -838,26 +838,26 @@ local function property_getter(message_meta)
   local member = message_meta._member
 
   return function (self, property)
-		local g = getter[property]
-		if g then
+    local g = getter[property]
+    if g then
       return g(self)
-		else
+    else
       return member[property]
-		end
-	end
+    end
+  end
 end
 
 local function property_setter(message_meta)
-	local setter = message_meta._setter
+  local setter = message_meta._setter
 
-	return function (self, property, value)
-		local s = setter[property]
-		if s then
-			s(self, value)
-		else
-			error(property .. " not found")
-		end
-	end
+  return function (self, property, value)
+    local s = setter[property]
+    if s then
+      s(self, value)
+    else
+      error(property .. " not found")
+    end
+  end
 end
 
 function _AddClassAttributesForNestedExtensions(descriptor, message_meta)
