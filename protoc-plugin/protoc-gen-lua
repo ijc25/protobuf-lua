@@ -297,6 +297,8 @@ def code_gen_field(index, field_desc, env):
     context('.number = %d\n' % field_desc.number)
     context('.index = %d\n' % index)
     context('.label = %d\n' % field_desc.label)
+    if field_desc.HasField('oneof_index'):
+        context('.oneof_index = %d\n' % field_desc.oneof_index)
 
     if field_desc.HasField('default_value'):
         context('.has_default_value = true\n')
@@ -334,6 +336,19 @@ def code_gen_field(index, field_desc, env):
     env.context.append(context.getvalue())
     return 'module.%s' % obj_name
 
+def code_gen_oneof(index, oneof_desc, env):
+    full_name = env.get_local_name() + '.' + oneof_desc.name
+    obj_name = full_name.upper().replace('.', '_') + '_ONEOF'
+    env.descriptor.append(
+        'module.%s = protobuf.OneofDescriptor()\n'% obj_name
+    )
+
+    context = Writer('module.%s' % obj_name)
+    context('.name = \'%s\'\n' % oneof_desc.name)
+
+    env.context.append(context.getvalue() + '\n')
+    return 'module.%s' % obj_name
+
 def code_gen_message(message_descriptor, env, containing_type = None):
     env.enter(message_descriptor.name)
     full_name = env.get_local_name()
@@ -366,6 +381,11 @@ def code_gen_message(message_descriptor, env, containing_type = None):
         context('.is_extendable = true\n')
     else:
         context('.is_extendable = false\n')
+
+    oneofs = []
+    for i, oneof_desc in enumerate(message_descriptor.oneof_decl):
+	oneofs.append(code_gen_oneof(i, oneof_desc, env))
+    context('.oneofs = {%s}\n' % ', '.join(oneofs))
 
     extensions = []
     for i, field_desc in enumerate(message_descriptor.extension):

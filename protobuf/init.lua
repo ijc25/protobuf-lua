@@ -71,6 +71,7 @@ make_descriptor("Descriptor", {}, {
   options = true,
   is_extendable = true,
   extension_ranges = true,
+  oneofs = true,
 })
 
 make_descriptor("FieldDescriptor", FieldDescriptor, {
@@ -88,6 +89,7 @@ make_descriptor("FieldDescriptor", FieldDescriptor, {
   enum_type = true,
   is_extension = true,
   extension_scope = true,
+  oneof_index = true,
 })
 
 make_descriptor("EnumDescriptor", {}, {
@@ -104,6 +106,10 @@ make_descriptor("EnumValueDescriptor", {}, {
   number = true,
   type = true,
   options = true
+})
+
+make_descriptor("OneofDescriptor", {}, {
+  name = true
 })
 
 -- Maps from field type to expected wiretype.
@@ -297,13 +303,28 @@ local function _AttachFieldHelpers(message_meta, field_descriptor)
   local is_repeated = (field_descriptor.label == FieldDescriptor.LABEL_REPEATED)
   local is_packed = (field_descriptor.has_options and field_descriptor.GetOptions().packed)
 
+  local oneof_index = field_descriptor.oneof_index
+  local oneof = nil
+  if oneof_index then
+    oneof = message_meta._descriptor.oneofs[oneof_index + 1].name
+  end
+
   rawset(field_descriptor, "_encoder", TYPE_TO_ENCODER[field_descriptor.type](field_descriptor.number, is_repeated, is_packed))
   rawset(field_descriptor, "_sizer", TYPE_TO_SIZER[field_descriptor.type](field_descriptor.number, is_repeated, is_packed))
   rawset(field_descriptor, "_default_constructor", _DefaultValueConstructorForField(field_descriptor))
 
   local AddDecoder = function(wiretype, is_packed)
     local tag_bytes = encoder.TagBytes(field_descriptor.number, wiretype)
-    message_meta._decoders_by_tag[tag_bytes] = TYPE_TO_DECODER[field_descriptor.type](field_descriptor.number, is_repeated, is_packed, field_descriptor, field_descriptor._default_constructor)
+    local decoder = TYPE_TO_DECODER[field_descriptor.type](field_descriptor.number, is_repeated, is_packed, field_descriptor, field_descriptor._default_constructor)
+    if oneof then
+      message_meta._decoders_by_tag[tag_bytes] = function (...)
+        message_meta._current_oneofs[oneof] = field_descriptor.name
+        return decoder(...)
+      end
+    else
+      message_meta._decoders_by_tag[tag_bytes] = decoder
+    end
+
   end
 
   AddDecoder(FIELD_TYPE_TO_WIRE_TYPE[field_descriptor.type], False)
@@ -335,6 +356,11 @@ end
 
 local function _AddPropertiesForRepeatedField(field, message_meta)
   local property_name = field.name
+  local oneof_index = field.oneof_index
+  local oneof = nil
+  if oneof_index then
+    oneof = message_meta._descriptor.oneofs[oneof_index + 1].name
+  end
 
   message_meta._getter[property_name] = function(self)
     local field_value = self._fields[field]
@@ -352,8 +378,16 @@ end
 local function _AddPropertiesForNonRepeatedCompositeField(field, message_meta)
   local property_name = field.name
   local message_type = field.message_type
+  local oneof_index = field.oneof_index
+  local oneof = nil
+  if oneof_index then
+    oneof = message_meta._descriptor.oneofs[oneof_index + 1].name
+  end
 
   message_meta._getter[property_name] = function(self)
+    if oneof and message_meta._current_oneofs[oneof] ~= property_name then
+      return nil
+    end
     local field_value = self._fields[field]
     if field_value == nil then
       field_value = message_type._concrete_class()
@@ -371,8 +405,16 @@ local function _AddPropertiesForNonRepeatedScalarField(field, message)
   local property_name = field.name
   local type_checker = GetTypeChecker(field.cpp_type, field.type)
   local default_value = field.default_value
+  local oneof_index = field.oneof_index
+  local oneof = nil
+  if oneof_index then
+    oneof = message._descriptor.oneofs[oneof_index + 1].name
+  end
 
   message._getter[property_name] = function(self)
+    if oneof and message._current_oneofs[oneof] ~= property_name then
+      return nil
+    end
     local value =  self._fields[field]
     if value ~= nil then
       return self._fields[field]
@@ -383,6 +425,9 @@ local function _AddPropertiesForNonRepeatedScalarField(field, message)
 
   message._setter[property_name] = function(self, new_value)
     type_checker(new_value)
+    if oneof then
+      message._current_oneofs[oneof] = property_name
+    end
     self._fields[field] = new_value
     if not self._cached_byte_size_dirty then
       message._member._Modified(self)
@@ -455,6 +500,12 @@ local function _AddPropertiesForExtensions(descriptor, message_meta)
   for extension_name, extension_field in pairs(extension_dict) do
     local constant_name = string.upper(extension_name) .. "_FIELD_NUMBER"
     message_meta._member[constant_name] = extension_field.number
+  end
+end
+
+local function _AddPropertiesForOneofs(descriptor, message_meta)
+  for oneof_nr, oneof_desc in pairs(descriptor.oneofs) do
+     message_meta._current_oneofs[oneof_desc.name] = nil
   end
 end
 
@@ -881,6 +932,7 @@ local function Message(descriptor)
   message_meta._descriptor = descriptor
   message_meta._extensions_by_name = {}
   message_meta._extensions_by_number = {}
+  message_meta._current_oneofs = {}
 
   message_meta._getter = {}
   message_meta._setter = {}
@@ -902,6 +954,7 @@ local function Message(descriptor)
   _AddClassAttributesForNestedExtensions(descriptor, message_meta)
   _AddPropertiesForFields(descriptor, message_meta)
   _AddPropertiesForExtensions(descriptor, message_meta)
+  _AddPropertiesForOneofs(descriptor, message_meta)
   _AddStaticMethods(message_meta)
   _AddMessageMethods(descriptor, message_meta)
   _AddPrivateHelperMethods(message_meta)
