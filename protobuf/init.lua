@@ -47,7 +47,7 @@ local function make_descriptor(name, descriptor, usable_key)
       if usable_key[key] then
         rawset(self, key, value)
       else
-        error("error key: "..key)
+        error(name.." error key: "..key)
       end
     end
   };
