@@ -307,6 +307,13 @@ function _SkipFixed32(buffer, pos, pend)
   return pos
 end
 
+function _RaiseInvalidStartGroup(buffer, pos, pend)
+  error('Tag had deprecated StartGroup wire type.')
+end
+function _RaiseInvalidEndGroup(buffer, pos, pend)
+  error('Tag had deprecated EndGroup wire type.')
+end
+
 function _RaiseInvalidWireType(buffer, pos, pend)
   error('Tag had invalid wire type.')
 end
@@ -316,8 +323,8 @@ function _FieldSkipper()
     _SkipVarint,
     _SkipFixed64,
     _SkipLengthDelimited,
-    _SkipGroup,
-    _EndGroup,
+    _RaiseInvalidStartGroup,
+    _RaiseInvalidEndGroup,
     _SkipFixed32,
     _RaiseInvalidWireType,
     _RaiseInvalidWireType,
