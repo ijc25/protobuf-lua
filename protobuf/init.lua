@@ -27,6 +27,7 @@ local table = table
 local string = string
 local tostring = tostring
 local type = type
+local next = next
 
 local pb = require "protobuf.pb"
 local wire_format = require "protobuf.wire_format"
@@ -392,7 +393,12 @@ local function _AddPropertiesForNonRepeatedCompositeField(field, message_meta)
     return field_value
   end
   message_meta._setter[property_name] = function(self, new_value)
-    error('Assignment not allowed to composite field' .. property_name .. 'in protocol message object.' )
+    -- allow setting a oneof member to an empty table to "select" that variant
+    if oneof and type(new_value) == "table" and next(new_value) == nil then
+      message_meta._current_oneofs[oneof] = property_name
+    else
+      error('Assignment not allowed to composite field "' .. property_name .. '" in protocol message object.' )
+    end
   end
 end
 
