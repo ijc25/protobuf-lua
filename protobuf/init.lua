@@ -356,11 +356,6 @@ end
 
 local function _AddPropertiesForRepeatedField(field, message_meta)
   local property_name = field.name
-  local oneof_index = field.oneof_index
-  local oneof = nil
-  if oneof_index then
-    oneof = message_meta._descriptor.oneofs[oneof_index + 1].name
-  end
 
   message_meta._getter[property_name] = function(self)
     local field_value = self._fields[field]
